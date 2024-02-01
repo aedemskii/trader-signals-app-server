@@ -1,159 +1,126 @@
 import requests
-import numpy as np
 import math
-from talib import MACD
+import numpy as np
+from talib import MACD, STOCHRSI, SMA, EMA, BBANDS, RSI
+
+
+CONST_SMA = 200
+CONST_EMA = 50
+CONST_RSI = 14
+CONST_MACD_FAST = 12
+CONST_MACD_SLOW = 26
+CONST_MACD_SIGNAL = 9
+CONST_STOCHRSI_K = 14
+CONST_STOCHRSI_D = 3
+CONST_BBANDS_SMA = 20
+CONST_BBANDS_MA = 2
+
+KEY_TIME = 'time'
+KEY_OPEN = 'open'
+KEY_HIGH = 'high'
+KEY_LOW = 'low'
+KEY_CLOSE = 'close'
+KEY_VOLUME = 'volume'
+KEY_SMA = 'sma'
+KEY_EMA = 'ema'
+KEY_RSI = 'rsi'
+KEY_MACD_MACD = 'macd-macd'
+KEY_MACD_SIGNAL = 'macd-signal'
+KEY_MACD_HIST = 'macd-hist'
+KEY_STOCHRSI_SLOW = 'stochrsi-slow'
+KEY_STOCHRSI_FAST = 'stochrsi-fast'
+KEY_BBANDS_LOWER = 'bbands-lower'
+KEY_BBANDS_SMA = 'bbands-sma'
+KEY_BBANDS_HIGHER = 'bbands-higher'
+
+
+def gatcher_data_for_client(symbol, interval):
+    data = fetch_candlestick_data(symbol, interval)
+    if data is None:
+        return None
+    else:
+        indicators = calculate_indicators(data)
+        data_for_client = compose_data_for_client(data, indicators)
+        return data_for_client
+
 
 def fetch_candlestick_data(symbol, interval):
-    url = f'https://api.binance.com/api/v3/klines'
-    params = {
-        'symbol': symbol,
-        'interval': interval,
-        'limit': 1000
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-    candlestick_data = []
-    close_prices = []
+    try:
+        url = f'https://api.binance.com/api/v3/klines'
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'limit': 600
+        }
+        response = requests.get(url, params=params)
+        data = response.json()
+        return data
+    
+    except Exception as e:
+        print(e)
+        return None
+    
 
-    for candlestick in data:
-        timestamp = candlestick[0] // 1000
-        open_price = float(candlestick[1])
-        high_price = float(candlestick[2])
-        low_price = float(candlestick[3])
-        close_price = float(candlestick[4])
-        volume = float(candlestick[5])
-
-        candlestick_data.append({
-            'time': timestamp,
-            'open': open_price,
-            'high': high_price,
-            'low': low_price,
-            'close': close_price,
-            'volume': volume,
-            'sma': {}
-        })
+def calculate_indicators(data):
+    indicators = {}
 
     close_prices = np.array([float(entry[4]) for entry in data])
 
-    add_sma_to_data(candlestick_data, 20)
-    add_sma_to_data(candlestick_data, 50)
-    add_rsi_to_data(candlestick_data)
-    #add_macd_to_data(candlestick_data)
-    add_macd_to_data(close_prices, candlestick_data)
-    add_sma_strategy_signals(candlestick_data, 20, 50)
-    return {'candlestick_data': candlestick_data, 'smas': [20, 50]}
+    indicators[KEY_SMA] = SMA(close_prices, CONST_SMA)
+    indicators[KEY_EMA] = EMA(close_prices, CONST_EMA)
+    indicators[KEY_RSI] = RSI(close_prices, CONST_RSI)
 
-def add_sma_strategy_signals(data, fast_sma, slow_sma):
-    for index, candlestick in enumerate(data):
-        if index == 0:
-            continue
-        fast_sma_value = candlestick['sma'][fast_sma]
-        slow_sma_value = candlestick['sma'][slow_sma]
-        prev_fast_sma_value = data[index - 1]['sma'][fast_sma]
-        prev_slow_sma_value = data[index - 1]['sma'][slow_sma]
-        if fast_sma_value and slow_sma_value and prev_fast_sma_value and prev_slow_sma_value:
-            candlestick['long'] = False
-            candlestick['short'] = False
-            if (fast_sma_value > slow_sma_value) and (prev_fast_sma_value <= prev_slow_sma_value):
-                candlestick['long'] = True
-            elif (fast_sma_value < slow_sma_value) and (prev_fast_sma_value >= prev_slow_sma_value):
-                candlestick['short'] = True
+    macd, signal, _ = MACD(close_prices, CONST_MACD_FAST, CONST_MACD_SLOW, CONST_MACD_SIGNAL)
+    indicators[KEY_MACD_MACD] = macd
+    indicators[KEY_MACD_SIGNAL] = signal
 
-def calculate_sma(data, sma_length):
-    sma_values = []
-    closing_prices = [candlestick['close'] for candlestick in data]
+    bb_lower, bb_sma, bb_higher = BBANDS(close_prices, CONST_BBANDS_SMA, CONST_BBANDS_MA)
+    indicators[KEY_BBANDS_LOWER] = bb_lower
+    indicators[KEY_BBANDS_SMA] = bb_sma
+    indicators[KEY_BBANDS_HIGHER] = bb_higher
 
-    for i in range(len(data)):
-        if i < sma_length - 1:
-            sma_values.append(None)
-        else:
-            sma = sum(closing_prices[i - sma_length + 1: i + 1]) / sma_length
-            sma_values.append(sma)
+    srsi_slow, srsi_fast = STOCHRSI(close_prices, CONST_STOCHRSI_D, CONST_STOCHRSI_D, CONST_STOCHRSI_D)
+    indicators[KEY_STOCHRSI_SLOW] = srsi_slow
+    indicators[KEY_STOCHRSI_FAST] = srsi_fast
 
-    return sma_values
+    return indicators
 
-def add_sma_to_data(data, sma_length = 20):
-    sma_values = calculate_sma(data, sma_length)
-    for candlestick, sma_value in zip(data, sma_values):
-        candlestick['sma'][sma_length] = sma_value
-    return data
 
-def add_rsi_to_data(data, rsi_length = 14):
-    rsi_values = calculate_rsi(data, rsi_length)
-    for candlestick, rsi_value in zip(data, rsi_values):
-        candlestick['rsi'] = rsi_value
-    return data
+def compose_data_for_client(data, indicators):
+    data_for_client = []
+    for candlestick, sma, ema, rsi, macd_macd, macd_signal, bb_lower, bb_sma, bb_higher, srsi_slow, srsi_fast in zip(data, indicators['sma'], indicators['ema'], indicators['rsi'], indicators['macd-macd'], indicators['macd-signal'], indicators['bbands-lower'], indicators['bbands-sma'], indicators['bbands-higher'], indicators['stochrsi-slow'], indicators['stochrsi-fast']):
+        candlestick_data = {
+            KEY_TIME: candlestick[0] // 1000,
+            KEY_OPEN: float(candlestick[1]),
+            KEY_HIGH: float(candlestick[2]),
+            KEY_LOW: float(candlestick[3]),
+            KEY_CLOSE: float(candlestick[4]),
+            KEY_VOLUME: float(candlestick[5])
+        }
 
-def calculate_rsi(data, rsi_length = 14):
-    if len(data) < rsi_length:
-        raise ValueError("Not enough data to calculate RSI")
+        if not math.isnan(sma):
+            candlestick_data[KEY_SMA] = float(sma)
 
-    rsi_values = [None] * (rsi_length - 1)
-    closing_prices = [candlestick['close'] for candlestick in data]
-    
-    # Initialize gains and losses
-    gains = losses = 0
-    for i in range(1, rsi_length):
-        change = closing_prices[i] - closing_prices[i - 1]
-        gains += max(change, 0)
-        losses += abs(min(change, 0))
-    
-    for i in range(rsi_length, len(data)):
-        change = closing_prices[i] - closing_prices[i - 1]
-        gains = (gains * (rsi_length - 1) + max(change, 0)) / rsi_length
-        losses = (losses * (rsi_length - 1) + abs(min(change, 0))) / rsi_length
-        
-        rs = gains / losses if losses != 0 else 0
-        rsi = 100 - (100 / (1 + rs))
-        rsi_values.append(rsi)
+        if not math.isnan(ema):
+            candlestick_data[KEY_EMA] = float(ema)
 
-    return rsi_values
+        if not math.isnan(rsi):
+            candlestick_data[KEY_RSI] = float(rsi)
 
-# def add_macd_to_data(data, fast_window = 12, slow_window = 26, signal_window = 9):
-#     macd_values = calculate_macd_signals(data, fast_window, slow_window, signal_window)
-#     for candlestick, macd_value in zip(data, macd_values):
-#         if macd_value:
-#             for property in macd_value:
-#                 candlestick[property] = macd_value[property]
-#     return data
+        if (not math.isnan(macd_macd)) and (not math.isnan(macd_signal)):
+            candlestick_data[KEY_MACD_MACD] = float(macd_macd)
+            candlestick_data[KEY_MACD_SIGNAL] = float(macd_signal)
+            candlestick_data[KEY_MACD_HIST] = float(macd_macd - macd_signal)
 
-# def calculate_macd_signals(data, fast_window, slow_window, signal_window):
-#     fast_ema = calculate_ema(data, fast_window)
-#     slow_ema = calculate_ema(data, slow_window)
-    
-#     macd_line = [{'close': fast - slow} for fast, slow in zip(fast_ema, slow_ema)]
-#     signal_line = calculate_ema(macd_line, signal_window)
+        if (not math.isnan(bb_lower)) and (not math.isnan(bb_sma)) and (not math.isnan(bb_higher)):
+            candlestick_data[KEY_BBANDS_LOWER] = float(bb_lower)
+            candlestick_data[KEY_BBANDS_SMA] = float(bb_sma)
+            candlestick_data[KEY_BBANDS_HIGHER] = float(bb_higher)
 
-#     macd_data = []
-#     for macd, signal in zip(macd_line, signal_line):
-#         macd_data.append({
-#             'macd': macd['close'],
-#             'signal': signal,
-#             'histogram': macd['close'] - signal
-#             })
-#     return (len(data) - len(macd_data))*[None] + macd_data
+        if (not math.isnan(srsi_slow)) and (not math.isnan(srsi_fast)):
+            candlestick_data[KEY_STOCHRSI_SLOW] = float(srsi_slow)
+            candlestick_data[KEY_STOCHRSI_FAST] = float(srsi_fast)
 
-# def calculate_ema(data, window):
-#     prices = [candle['close'] for candle in data]
-#     ema = []
-#     smoothing = 2 / (window + 1)
-    
-#     # Calculate SMA for the first data point
-#     sma = sum(prices[:window]) / window
-#     ema.append(sma)
-    
-#     # Calculate EMA for the rest of the data points
-#     for price in prices[window:]:
-#         next_ema = (price - ema[-1]) * smoothing + ema[-1]
-#         ema.append(next_ema)
-    
-#     return ema
+        data_for_client.append(candlestick_data)
 
-def add_macd_to_data(closing_prices, data):
-    macd, signal, _ = MACD(closing_prices, fastperiod=12, slowperiod=26, signalperiod=9)
-
-    for candlestick, m, s in zip(data, macd, signal):
-        if (not math.isnan(m)) and (not math.isnan(s)):
-            candlestick['macd'] = m
-            candlestick['signal'] = s
-            candlestick['histogram'] = m - s
+    return data_for_client

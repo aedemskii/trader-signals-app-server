@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_restful import Resource, Api
-from trading_bots import fetch_candlestick_data
+from trading_bots import gatcher_data_for_client
 
 app = Flask(__name__)
 api = Api(app)
@@ -32,8 +32,11 @@ class Assets(Resource):
 class Asset(Resource):
     def get(self, asset = 'BTC', timeframe = '1h'):
         symbol = f'{asset}USDT'
-        signals = fetch_candlestick_data(symbol, timeframe.lower())
-        return jsonify(signals)
+        data = gatcher_data_for_client(symbol, timeframe.lower())
+        if data is None:
+            return jsonify({'error': 'no data'}), 400
+        else:
+            return jsonify(data)
 
 
 api.add_resource(Assets, '/assets')
