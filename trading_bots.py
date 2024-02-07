@@ -74,7 +74,7 @@ def calculate_indicators(data):
     indicators[KEY_MACD_MACD] = macd
     indicators[KEY_MACD_SIGNAL] = signal
 
-    bb_lower, bb_sma, bb_higher = BBANDS(close_prices, CONST_BBANDS_SMA, CONST_BBANDS_MA)
+    bb_higher, bb_sma, bb_lower = BBANDS(close_prices, CONST_BBANDS_SMA, CONST_BBANDS_MA)
     indicators[KEY_BBANDS_LOWER] = bb_lower
     indicators[KEY_BBANDS_SMA] = bb_sma
     indicators[KEY_BBANDS_HIGHER] = bb_higher
