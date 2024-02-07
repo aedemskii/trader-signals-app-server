@@ -10,7 +10,9 @@ CONST_RSI = 14
 CONST_MACD_FAST = 12
 CONST_MACD_SLOW = 26
 CONST_MACD_SIGNAL = 9
-CONST_STOCHRSI_K = 14
+CONST_STOCHRSI_RSI = 14
+CONST_STOCHRSI_STOCH = 14
+CONST_STOCHRSI_K = 3
 CONST_STOCHRSI_D = 3
 CONST_BBANDS_SMA = 20
 CONST_BBANDS_MA = 2
@@ -79,7 +81,7 @@ def calculate_indicators(data):
     indicators[KEY_BBANDS_SMA] = bb_sma
     indicators[KEY_BBANDS_HIGHER] = bb_higher
 
-    srsi_slow, srsi_fast = STOCHRSI(close_prices, CONST_STOCHRSI_D, CONST_STOCHRSI_D, CONST_STOCHRSI_D)
+    srsi_slow, srsi_fast = STOCHRSI(close_prices, CONST_STOCHRSI_RSI, CONST_STOCHRSI_STOCH, CONST_STOCHRSI_K, CONST_STOCHRSI_D)
     indicators[KEY_STOCHRSI_SLOW] = srsi_slow
     indicators[KEY_STOCHRSI_FAST] = srsi_fast
 
